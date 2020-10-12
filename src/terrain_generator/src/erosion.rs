@@ -158,6 +158,29 @@ pub struct Lake {
     shores: BinaryHeap<LakeShorePoint>,
 }
 
+fn merge_lakes(
+    lake_id: usize,
+    other_lake_id: usize,
+    lakes: &mut [Lake],
+    lake_associations: &mut [Option<usize>],
+) {
+    let other_lake = mem::take(&mut lakes[other_lake_id]);
+
+    // Transfer the old lake's shore points to the new lake
+    for lake_shore_point in other_lake.shores {
+        lakes[lake_id].shores.push(lake_shore_point);
+    }
+
+    // Transfer all points over to the new lake
+    for old_lake_id in lake_associations.iter_mut().filter_map(|o| o.as_mut()) {
+        if *old_lake_id == other_lake_id {
+            *old_lake_id = lake_id;
+        }
+    }
+
+    lakes[lake_id].area += other_lake.area;
+}
+
 fn expand_lake(
     id: usize,
     heights: &[f64],
@@ -195,35 +218,12 @@ fn expand_lake(
             next_shore.height,
             lakes[other_lake_id].water_level
         );
+        merge_lakes(lake_id, other_lake_id, lakes, lake_associations);
 
-        // If the new point was already the shore of another lake,
-        // merge the lakes.
-        // Merge the smaller lake into the larger lake
-        let (smaller_lake, smaller_lake_id, larger_lake_id) =
-            if lakes[lake_id].area <= lakes[other_lake_id].area {
-                (mem::take(&mut lakes[lake_id]), lake_id, other_lake_id)
-            } else {
-                (mem::take(&mut lakes[other_lake_id]), other_lake_id, lake_id)
-            };
-
-        for lake_shore_point in smaller_lake.shores {
-            lakes[larger_lake_id].shores.push(lake_shore_point);
+        while lakes[lake_id].shores.peek().cloned() == Some(next_shore) {
+            lakes[lake_id].shores.pop();
         }
 
-        for lake_id in lake_associations.iter_mut().filter_map(|o| o.as_mut()) {
-            if *lake_id == smaller_lake_id {
-                *lake_id = larger_lake_id;
-            }
-        }
-
-        lakes[larger_lake_id].water_level = lakes[larger_lake_id]
-            .water_level
-            .max(smaller_lake.water_level);
-        lakes[larger_lake_id].area += smaller_lake.area;
-
-        while lakes[larger_lake_id].shores.peek().cloned() == Some(next_shore) {
-            lakes[larger_lake_id].shores.pop();
-        }
         expand_lake(id, heights, voronoi, lakes, lake_associations, sea_level)
     } else if voronoi.adjacent[next_shore.id].iter().all(|neighbour| {
         heights[*neighbour] >= next_shore.height || lake_associations[*neighbour] == Some(lake_id)
