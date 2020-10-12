@@ -155,7 +155,7 @@ impl TerrainGenerator {
 
         log!(" ·  ✓ and eroded ×10");
 
-        let lakes = fill_lakes(&heights, &voronoi, sea_level);
+        let lakes = generate_lakes(&heights, &voronoi, sea_level);
 
         log!(
             "Computed lake tiles. {} lake tiles, {} non-lake tiles",
