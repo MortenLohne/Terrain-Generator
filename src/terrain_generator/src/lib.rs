@@ -9,6 +9,7 @@ extern crate serde_derive;
 
 mod coasts;
 mod erosion;
+mod lakes;
 mod noise;
 mod poisson;
 mod rivers;

@@ -7,6 +7,8 @@ use super::poisson;
 use super::rivers::*;
 use super::utils;
 use super::voronoi::Voronoi;
+use crate::lakes::{generate_lakes, Lake};
+
 extern crate web_sys;
 
 #[allow(unused_macros)]
@@ -34,7 +36,7 @@ pub struct World {
     #[serde(rename = "coastLines")]
     coast_lines: Vec<(usize, usize)>,
 
-    lakes: Vec<Option<usize>>,
+    lakes: Vec<Option<Lake>>,
 }
 
 #[wasm_bindgen]
