@@ -25,6 +25,12 @@ pub struct Voronoi {
     pub voronoi_cells: Vec<Vec<usize>>,
 }
 
+impl Voronoi {
+    pub fn is_on_map_border(&self, i: usize) -> bool {
+        self.adjacent[i].len() == 2
+    }
+}
+
 // #[wasm_bindgen]
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Delaunay {

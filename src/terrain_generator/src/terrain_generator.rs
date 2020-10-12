@@ -7,15 +7,14 @@ use super::poisson;
 use super::rivers::*;
 use super::utils;
 use super::voronoi::Voronoi;
-
 extern crate web_sys;
 
 #[allow(unused_macros)]
 macro_rules! log {
     ( $( $t:tt )* ) => {
-        if cfg![target = "wasm32-unknown-unknown"] {
+        // if cfg![target = "wasm32-unknown-unknown"] {
             web_sys::console::log_1(&format!( $( $t )* ).into());
-        }
+        // }
     }
 }
 
@@ -34,6 +33,8 @@ pub struct World {
 
     #[serde(rename = "coastLines")]
     coast_lines: Vec<(usize, usize)>,
+
+    lakes: Vec<Option<usize>>,
 }
 
 #[wasm_bindgen]
@@ -152,6 +153,16 @@ impl TerrainGenerator {
             heights = erode(heights, &voronoi.adjacent, sea_level);
         }
 
+        let lakes = fill_lakes(&heights, &voronoi, sea_level);
+
+        log!(
+            "Computed lake tiles. {} lake tiles, {} non-lake tiles",
+            lakes.iter().filter(|b| b.is_some()).count(),
+            lakes.iter().filter(|b| b.is_none()).count()
+        );
+
+        log!("{:?}", lakes.iter().filter_map(|l| *l).collect::<Vec<_>>());
+
         log!(" ·  ✓ and eroded ×10");
         let cell_heights = TerrainGenerator::get_cell_heights(
             voronoi.delaunay.points.len() / 2,
@@ -185,6 +196,12 @@ impl TerrainGenerator {
         );
         log!(" ✓ coasts lines carved");
 
+        for (i, height) in heights.iter_mut().enumerate() {
+            if lakes[i].is_some() {
+                *height -= 0.05;
+            }
+        }
+
         World {
             voronoi,
             heights,
@@ -192,6 +209,7 @@ impl TerrainGenerator {
             rivers,
             triangle_heights,
             coast_lines,
+            lakes,
         }
     }
 }

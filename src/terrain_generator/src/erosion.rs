@@ -1,3 +1,14 @@
+use crate::voronoi::Voronoi;
+use std::collections::BinaryHeap;
+use std::iter::FromIterator;
+use std::mem;
+use wasm_bindgen::__rt::core::cmp::Ordering;
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
+}
+
 pub fn get_flux(heights: &Vec<f64>, adjacent: &Vec<Vec<usize>>) -> Vec<f64> {
     let mut flux = vec![0.; heights.len()];
 
@@ -113,10 +124,280 @@ pub fn plateau(points: &Vec<f64>, mut heights: Vec<f64>) -> Vec<f64> {
     heights
 }
 
+#[derive(Clone, Copy, Default, Serialize, Debug, PartialEq)]
+struct LakeShorePoint {
+    id: usize,
+    height: f64,
+}
+
+impl Eq for LakeShorePoint {}
+
+impl PartialOrd for LakeShorePoint {
+    /// This ordering is reversed, for use in a PQ
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(
+            self.height
+                .partial_cmp(&other.height)
+                .unwrap()
+                .reverse()
+                .then(self.id.cmp(&other.id)),
+        )
+    }
+}
+
+impl Ord for LakeShorePoint {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(&other).unwrap()
+    }
+}
+
+#[derive(Serialize, Default, Debug)]
+pub struct Lake {
+    water_level: f64,
+    area: usize,
+    shores: BinaryHeap<LakeShorePoint>,
+}
+
+fn expand_lake(
+    id: usize,
+    heights: &[f64],
+    voronoi: &Voronoi,
+    lakes: &mut [Lake],
+    lake_associations: &mut [Option<usize>],
+    sea_level: f64,
+) {
+    let lake_id = lake_associations[id].unwrap();
+
+    if lakes[lake_id].shores.is_empty() {
+        println!("No more for lake {}", lake_id);
+        return;
+    }
+
+    let next_shore = *lakes[lake_id].shores.peek().unwrap();
+
+    log!("Next shore: {:?}", next_shore);
+
+    if let Some(other_lake_id) = lake_associations[next_shore.id] {
+        assert_ne!(lake_id, other_lake_id, "Next shore: {:?}", next_shore);
+        // if lakes[other_lake_id].shores.peek().unwrap().id == next_shore.id {
+        log!(
+            "Trying to merge at point {} height {}, shores {:?}",
+            next_shore.id,
+            next_shore.height,
+            lakes[other_lake_id].shores
+        );
+
+        log!("Merging lakes {} and {}", lake_id, other_lake_id);
+
+        assert!(
+            (next_shore.height - lakes[other_lake_id].water_level).abs() < f64::EPSILON,
+            "Tried to merge at height {:.6} into a lake of height {:.6}",
+            next_shore.height,
+            lakes[other_lake_id].water_level
+        );
+
+        // If the new point was already the shore of another lake,
+        // merge the lakes.
+        // Merge the smaller lake into the larger lake
+        let (smaller_lake, smaller_lake_id, larger_lake_id) =
+            if lakes[lake_id].area <= lakes[other_lake_id].area {
+                (mem::take(&mut lakes[lake_id]), lake_id, other_lake_id)
+            } else {
+                (mem::take(&mut lakes[other_lake_id]), other_lake_id, lake_id)
+            };
+
+        for lake_shore_point in smaller_lake.shores {
+            lakes[larger_lake_id].shores.push(lake_shore_point);
+        }
+
+        for lake_id in lake_associations.iter_mut().filter_map(|o| o.as_mut()) {
+            if *lake_id == smaller_lake_id {
+                *lake_id = larger_lake_id;
+            }
+        }
+
+        lakes[larger_lake_id].water_level = lakes[larger_lake_id]
+            .water_level
+            .max(smaller_lake.water_level);
+        lakes[larger_lake_id].area += smaller_lake.area;
+
+        while lakes[larger_lake_id].shores.peek().cloned() == Some(next_shore) {
+            lakes[larger_lake_id].shores.pop();
+        }
+        expand_lake(id, heights, voronoi, lakes, lake_associations, sea_level)
+    } else if voronoi.adjacent[next_shore.id].iter().all(|neighbour| {
+        heights[*neighbour] >= next_shore.height || lake_associations[*neighbour] == Some(lake_id)
+    }) && !voronoi.is_on_map_border(next_shore.id)
+    {
+        if let Some(other_lake_id) = lake_associations[next_shore.id] {
+            assert!(lakes[other_lake_id].water_level <= lakes[lake_id].water_level);
+            assert!(
+                lakes[other_lake_id].water_level <= next_shore.height,
+                "Found shore with height {:.6}, but inside lake {} with water level {:.6}",
+                next_shore.height,
+                other_lake_id,
+                lakes[other_lake_id].water_level
+            );
+        }
+        log!("Expanding lake {}", lake_id);
+        lakes[lake_id].water_level = next_shore.height;
+        lakes[lake_id].area += 1;
+        lake_associations[next_shore.id] = Some(lake_id);
+
+        log!(
+            "Raised lake {} to {:.6}",
+            lake_id,
+            lakes[lake_id].water_level
+        );
+
+        // Add the new point's neighbours to the lake's shore
+        for neighbour in voronoi.adjacent[next_shore.id].iter() {
+            match lake_associations[*neighbour] {
+                None => lakes[lake_id].shores.push(LakeShorePoint {
+                    id: *neighbour,
+                    height: heights[*neighbour],
+                }),
+                Some(other_lake_id) if other_lake_id != lake_id => {
+                    log!(
+                            "Found edge between height {:.6} and height {:.6} between lakes {} and {} with water heights {:.6} and {:.6}",
+                            heights[next_shore.id],
+                            heights[*neighbour],
+                            lake_id,
+                            other_lake_id,
+                            lakes[lake_id].water_level,
+                            lakes[other_lake_id].water_level
+                        );
+                    lakes[lake_id].shores.push(LakeShorePoint {
+                        id: *neighbour,
+                        height: heights[*neighbour],
+                    });
+                }
+                Some(_) => (),
+            }
+        }
+
+        while lakes[lake_id].shores.peek().cloned() == Some(next_shore) {
+            lakes[lake_id].shores.pop();
+        }
+        expand_lake(
+            next_shore.id,
+            heights,
+            voronoi,
+            lakes,
+            lake_associations,
+            sea_level,
+        )
+    } else {
+        log!("Expanding lake {} for the last time", lake_id);
+        lakes[lake_id].water_level = next_shore.height;
+        lakes[lake_id].area += 1;
+        lake_associations[next_shore.id] = Some(lake_id);
+
+        log!(
+            "Raised lake {} to {:.6}",
+            lake_id,
+            lakes[lake_id].water_level
+        );
+
+        while lakes[lake_id].shores.peek().cloned() == Some(next_shore) {
+            lakes[lake_id].shores.pop();
+        }
+    }
+}
+
+pub fn fill_lakes(heights: &[f64], voronoi: &Voronoi, sea_level: f64) -> Vec<Option<usize>> {
+    let mut lake_affiliation = vec![None; heights.len()];
+
+    let mut lakes = vec![];
+
+    for (i, height) in heights.iter().enumerate() {
+        if *height > sea_level
+            && lake_affiliation[i].is_none()
+            && voronoi.adjacent[i]
+                .iter()
+                .all(|neighbour| heights[*neighbour] > *height)
+        {
+            let shores =
+                BinaryHeap::from_iter(voronoi.adjacent[i].iter().map(|j| LakeShorePoint {
+                    id: *j,
+                    height: heights[*j],
+                }));
+            let lowest_shore = shores.peek().unwrap().height;
+
+            lakes.push(Lake {
+                water_level: lowest_shore,
+                area: 1,
+                shores,
+            });
+
+            lake_affiliation[i] = Some(lakes.len() - 1);
+
+            expand_lake(
+                i,
+                heights,
+                voronoi,
+                &mut lakes,
+                &mut lake_affiliation,
+                sea_level,
+            );
+        }
+    }
+
+    /*
+    for (i, height) in heights.iter().enumerate() {
+        if *height < sea_level || voronoi.is_on_map_border(i) {
+            stack.push(i);
+        }
+    }
+
+    while let Some(i) = stack.pop() {
+        if !visited[i] {
+            visited[i] = true;
+            lakes[i] = false;
+            if heights[i] > sea_level {
+                log!(
+                    "Made surface tile {} with height {} into non-lake with sea level {}",
+                    i,
+                    heights[i],
+                    sea_level
+                )
+            } else {
+                log!(
+                    "Made sea tile {} with height {} into non-lake with sea level {}",
+                    i,
+                    heights[i],
+                    sea_level
+                )
+            }
+            stack.extend(
+                voronoi.adjacent[i]
+                    .iter()
+                    .filter(|j| heights[**j] > heights[i]),
+            )
+        }
+    }
+
+    for i in 0..lakes.len() {
+        if lakes[i]
+            && voronoi.adjacent[i]
+                .iter()
+                .all(|neighbour| !lakes[*neighbour])
+        {
+            lakes[i] = false;
+            log!("Removed microlake");
+        }
+    }
+    */
+
+    // assert!(lakes.iter().any(|b| *b));
+
+    lake_affiliation
+}
+
 pub fn erode(heights: Vec<f64>, adjacent: &Vec<Vec<usize>>, sea_level: f64) -> Vec<f64> {
     // let heights = smooth_coasts(heights, adjacent, sea_level);
     let heights = smooth(heights, adjacent);
-    let heights = fill_sinks(heights, adjacent, sea_level);
+    // let heights = fill_sinks(heights, adjacent, sea_level);
 
     let flux = get_flux(&heights, adjacent);
     // let n = heights.len() as f64;
