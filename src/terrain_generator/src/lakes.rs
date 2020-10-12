@@ -30,7 +30,7 @@ impl Ord for LakeShorePoint {
         self.partial_cmp(&other).unwrap()
     }
 }
-
+/// An internal lake struct, with extra bookkeeping data
 #[derive(Serialize, Default, Debug)]
 struct LakeBuilder {
     water_level: f64,
@@ -39,6 +39,8 @@ struct LakeBuilder {
     shores: BinaryHeap<LakeShorePoint>,
 }
 
+/// A lake on the map.
+/// Two lakes with the same `highest shore point` are guaranteed to be the same lake.
 #[derive(Serialize, Default, Debug, Clone, Copy, PartialEq)]
 pub struct Lake {
     water_level: f64,
@@ -84,6 +86,7 @@ fn expand_lake(
         lakes[lake_id].shores.pop();
     }
 
+    // If we expand into another lake, merge it
     if let Some(other_lake_id) = lake_associations[next_shore.id] {
         merge_lakes(lake_id, other_lake_id, lakes, lake_associations);
     }
@@ -112,10 +115,17 @@ fn expand_lake(
     }
 }
 
+/// Generate lakes in any terrain depressions above sea level.
+/// The resulting vector corresponds to each point in the world
 pub fn generate_lakes(heights: &[f64], voronoi: &Voronoi, sea_level: f64) -> Vec<Option<Lake>> {
     let mut lake_associations = vec![None; heights.len()];
 
     let mut lake_builders = vec![];
+
+    // Start in every point on the map which is below all its neighbours.
+    // Start a lake there, and incrementally expand the lake into its lowest shore point,
+    // until it reaches a downward slope or the map edge.
+    // If two lakes meet, merge them and continue expanding.
 
     for (i, height) in heights.iter().enumerate() {
         if *height > sea_level
