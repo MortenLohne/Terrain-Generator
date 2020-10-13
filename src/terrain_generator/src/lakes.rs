@@ -43,9 +43,10 @@ struct LakeBuilder {
 /// Two lakes with the same `highest shore point` are guaranteed to be the same lake.
 #[derive(Serialize, Default, Debug, Clone, Copy, PartialEq)]
 pub struct Lake {
-    water_level: f64,
-    area: usize,
-    highest_shore_point: usize,
+    pub water_level: f64,
+    pub area: usize,
+    pub highest_shore_point: usize,
+    pub inflow_flux: f64,
 }
 
 fn merge_lakes(
@@ -117,7 +118,11 @@ fn expand_lake(
 
 /// Generate lakes in any terrain depressions above sea level.
 /// The resulting vector corresponds to each point in the world
-pub fn generate_lakes(heights: &[f64], voronoi: &Voronoi, sea_level: f64) -> Vec<Option<Lake>> {
+pub fn generate_lakes(
+    heights: &[f64],
+    voronoi: &Voronoi,
+    sea_level: f64,
+) -> (Vec<Lake>, Vec<Option<usize>>) {
     let mut lake_associations = vec![None; heights.len()];
 
     let mut lake_builders = vec![];
@@ -161,18 +166,18 @@ pub fn generate_lakes(heights: &[f64], voronoi: &Voronoi, sea_level: f64) -> Vec
     }
 
     let lakes = lake_associations
-        .into_iter()
-        .map(|o| {
-            o.map(|lake_id| {
-                let lake_builder = lake_builders.get(lake_id).unwrap();
-                Lake {
-                    water_level: lake_builder.water_level,
-                    area: lake_builder.area,
-                    highest_shore_point: lake_builder.highest_shore_point,
-                }
-            })
+        .iter()
+        .flatten()
+        .map(|lake_id| {
+            let lake_builder = lake_builders.get(*lake_id).unwrap();
+            Lake {
+                inflow_flux: 0.0,
+                water_level: lake_builder.water_level,
+                area: lake_builder.area,
+                highest_shore_point: lake_builder.highest_shore_point,
+            }
         })
         .collect();
 
-    lakes
+    (lakes, lake_associations)
 }

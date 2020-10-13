@@ -33,7 +33,7 @@ pub struct World {
     #[serde(rename = "coastLines")]
     coast_lines: Vec<(usize, usize)>,
 
-    lakes: Vec<Option<Lake>>,
+    lakes: Vec<Lake>,
 }
 
 #[wasm_bindgen]
@@ -154,15 +154,15 @@ impl TerrainGenerator {
 
         log!(" ·  ✓ and eroded ×10");
 
-        let lakes = generate_lakes(&heights, &voronoi, sea_level);
+        let (lakes, lake_associations) = generate_lakes(&heights, &voronoi, sea_level);
 
         log!(
             "Computed lake tiles. {} lake tiles, {} non-lake tiles",
-            lakes.iter().filter(|b| b.is_some()).count(),
-            lakes.iter().filter(|b| b.is_none()).count()
+            lake_associations.iter().filter(|b| b.is_some()).count(),
+            lake_associations.iter().filter(|b| b.is_none()).count()
         );
 
-        log!("{:?}", lakes.iter().filter_map(|l| *l).collect::<Vec<_>>());
+        log!("{:?}", lakes);
 
         let cell_heights = TerrainGenerator::get_cell_heights(
             voronoi.delaunay.points.len() / 2,
@@ -197,7 +197,7 @@ impl TerrainGenerator {
         log!(" ✓ coasts lines carved");
 
         for (i, height) in heights.iter_mut().enumerate() {
-            if lakes[i].is_some() {
+            if lake_associations[i].is_some() {
                 *height -= 0.05;
             }
         }
