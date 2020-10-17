@@ -149,15 +149,21 @@ impl TerrainGenerator {
         log!(" ·  ✓ and plateaued");
 
         for _ in 0..10 {
-            heights = erode(heights, &voronoi.adjacent, sea_level);
+            heights = erode(
+                heights,
+                &voronoi,
+                &voronoi.adjacent,
+                sea_level,
+            );
         }
 
         log!(" ·  ✓ and eroded ×10");
 
-        let (lakes, lake_associations) = generate_lakes(&heights, &voronoi, sea_level);
+        let (mut lakes, lake_associations) = generate_lakes(&heights, &voronoi, sea_level);
 
         log!(
-            "Computed lake tiles. {} lake tiles, {} non-lake tiles",
+            "Computed {} lakes. {} lake tiles, {} non-lake tiles",
+            lakes.len(),
             lake_associations.iter().filter(|b| b.is_some()).count(),
             lake_associations.iter().filter(|b| b.is_none()).count()
         );
@@ -184,6 +190,8 @@ impl TerrainGenerator {
             sea_level,
             &voronoi.voronoi_cells,
             &cell_heights,
+            &mut lakes,
+            &lake_associations,
         );
         log!(" ✓ rivers flowed");
 

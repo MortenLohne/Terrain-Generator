@@ -1,4 +1,5 @@
 use super::erosion::get_flux;
+use crate::lakes::Lake;
 
 type River = Vec<(usize, f64)>;
 
@@ -89,8 +90,10 @@ pub fn get_rivers(
     sea_level: f64,
     voronoi_cells: &Vec<Vec<usize>>,
     cell_heights: &Vec<f64>,
+    lakes: &mut [Lake],
+    lake_associations: &[Option<usize>],
 ) -> Vec<River> {
-    let flux = get_flux(heights, adjacent);
+    let flux = get_flux(heights, adjacent, lakes, lake_associations);
 
     let mut points_by_height = (0..heights.len()).collect::<Vec<usize>>();
     points_by_height.sort_unstable_by(|a, b| heights[*a].partial_cmp(&heights[*b]).unwrap());

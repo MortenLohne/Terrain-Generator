@@ -1,4 +1,21 @@
-pub fn get_flux(heights: &Vec<f64>, adjacent: &Vec<Vec<usize>>) -> Vec<f64> {
+use crate::lakes::{generate_lakes, Lake};
+use crate::voronoi::Voronoi;
+
+#[allow(unused_macros)]
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        // if cfg![target = "wasm32-unknown-unknown"] {
+            web_sys::console::log_1(&format!( $( $t )* ).into());
+        // }
+    }
+}
+
+pub fn get_flux(
+    heights: &Vec<f64>,
+    adjacent: &Vec<Vec<usize>>,
+    lakes: &mut [Lake],
+    lake_associations: &[Option<usize>],
+) -> Vec<f64> {
     let mut flux = vec![0.0; heights.len()];
 
     let mut sorted = (0..heights.len()).collect::<Vec<usize>>();
@@ -11,8 +28,28 @@ pub fn get_flux(heights: &Vec<f64>, adjacent: &Vec<Vec<usize>>) -> Vec<f64> {
             .min_by(|a, b| heights[**a].partial_cmp(&heights[**b]).unwrap())
             .unwrap();
 
+        let flux_downstream = if let Some(lake_id) = lake_associations[point] {
+            let lake = lakes[lake_id];
+            if lake.lowest_shore_point == point {
+                log!(
+                    "Flowing from lake with {:.4} inflow and {} area",
+                    lake.inflow_flux,
+                    lake.area
+                );
+                lake.inflow_flux + lake.area as f64
+            } else {
+                0.0
+            }
+        } else {
+            flux[point] + 1.0
+        };
+
         if adjacent[point].len() > 2 && heights[lowest_neighbour] < heights[point] {
-            flux[lowest_neighbour] += flux[point] + 1.0;
+            if let Some(lake_id) = lake_associations[lowest_neighbour] {
+                lakes[lake_id].inflow_flux += flux_downstream;
+            } else {
+                flux[lowest_neighbour] += flux_downstream;
+            }
         }
     }
     flux
@@ -99,12 +136,19 @@ pub fn plateau(points: &Vec<f64>, mut heights: Vec<f64>) -> Vec<f64> {
     heights
 }
 
-pub fn erode(heights: Vec<f64>, adjacent: &Vec<Vec<usize>>, sea_level: f64) -> Vec<f64> {
+pub fn erode(
+    heights: Vec<f64>,
+    voronoi: &Voronoi,
+    adjacent: &Vec<Vec<usize>>,
+    sea_level: f64,
+) -> Vec<f64> {
     // let heights = smooth_coasts(heights, adjacent, sea_level);
     let heights = smooth(heights, adjacent);
     // let heights = fill_sinks(heights, adjacent, sea_level);
 
-    let flux = get_flux(&heights, adjacent);
+    let (mut lakes, lake_associations) = generate_lakes(&heights, voronoi, sea_level);
+
+    let flux = get_flux(&heights, adjacent, &mut lakes, &lake_associations);
     // let n = heights.len() as f64;
 
     let erosion_rate = 0.015;

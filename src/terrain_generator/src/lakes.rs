@@ -4,6 +4,15 @@ use std::collections::BinaryHeap;
 use std::iter::FromIterator;
 use std::mem;
 
+#[allow(unused_macros)]
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        // if cfg![target = "wasm32-unknown-unknown"] {
+            web_sys::console::log_1(&format!( $( $t )* ).into());
+        // }
+    }
+}
+
 #[derive(Clone, Copy, Default, Serialize, Debug, PartialEq)]
 struct LakeShorePoint {
     id: usize,
@@ -35,7 +44,7 @@ impl Ord for LakeShorePoint {
 struct LakeBuilder {
     water_level: f64,
     area: usize,
-    highest_shore_point: usize,
+    lowest_shore_point: Option<usize>,
     shores: BinaryHeap<LakeShorePoint>,
 }
 
@@ -45,7 +54,7 @@ struct LakeBuilder {
 pub struct Lake {
     pub water_level: f64,
     pub area: usize,
-    pub highest_shore_point: usize,
+    pub lowest_shore_point: usize,
     pub inflow_flux: f64,
 }
 
@@ -94,7 +103,7 @@ fn expand_lake(
 
     lakes[lake_id].water_level = next_shore.height;
     lakes[lake_id].area += 1;
-    lakes[lake_id].highest_shore_point = next_shore.id;
+    lakes[lake_id].lowest_shore_point = Some(next_shore.id);
     lake_associations[next_shore.id] = Some(lake_id);
 
     // Check if the lake can expand further from this point
@@ -149,7 +158,7 @@ pub fn generate_lakes(
                 water_level: *height,
                 area: 1,
                 shores,
-                highest_shore_point: i,
+                lowest_shore_point: Some(i),
             });
 
             let lake_id = lake_builders.len() - 1;
@@ -165,19 +174,88 @@ pub fn generate_lakes(
         }
     }
 
-    let lakes = lake_associations
+    log!(
+        "Lake builders: {:?}\nLake associations:{:?}",
+        lake_builders,
+        lake_associations
+    );
+
+    for (i, lake_association) in lake_associations.iter().enumerate() {
+        if let Some(l) = lake_association {
+            if lake_builders[*l].lowest_shore_point == Some(i) {
+                log!("Lake {:?} at points {}", lake_builders[*l], i);
+            }
+        }
+    }
+
+    for (lake_id, lake_builder) in lake_builders.iter().enumerate() {
+        if lake_builder.lowest_shore_point.is_some() {
+            assert_eq!(
+                lake_associations[lake_builder.lowest_shore_point.unwrap()],
+                Some(lake_id),
+                "Lake builder #{}: {:?}'s highest point belongs to lake {:?}",
+                lake_id,
+                lake_builder,
+                lake_associations[lake_builder.lowest_shore_point.unwrap()]
+            );
+        }
+    }
+
+    let deduped_lakes: Vec<Lake> = lake_associations
         .iter()
-        .flatten()
-        .map(|lake_id| {
-            let lake_builder = lake_builders.get(*lake_id).unwrap();
+        .enumerate()
+        .filter_map(|(i, lake_id)| lake_id.map(|l| (i, l)))
+        .filter(|(i, lake_id)| lake_builders[*lake_id].lowest_shore_point == Some(*i))
+        .map(|(_, lake_id)| {
+            let lake_builder = lake_builders.get(lake_id).unwrap();
             Lake {
                 inflow_flux: 0.0,
                 water_level: lake_builder.water_level,
                 area: lake_builder.area,
-                highest_shore_point: lake_builder.highest_shore_point,
+                lowest_shore_point: lake_builder.lowest_shore_point.unwrap(),
             }
         })
         .collect();
 
-    (lakes, lake_associations)
+    let mut deduped_lake_associations = vec![None; heights.len()];
+
+    for (i, lake) in deduped_lakes.iter().enumerate() {
+        assert_ne!(lake.area, 0);
+        deduped_lake_associations[lake.lowest_shore_point] = Some(i);
+    }
+
+    for (point, lake_association) in lake_associations.iter().enumerate() {
+        if let Some(l) = lake_association {
+            deduped_lake_associations[point] = Some(
+                deduped_lake_associations[lake_builders[*l].lowest_shore_point.unwrap()].unwrap(),
+            );
+        }
+    }
+
+    for (lake_id, lake) in deduped_lakes.iter().enumerate() {
+        if lake.lowest_shore_point != 0 && lake.area != 0 {
+            assert_eq!(
+                deduped_lake_associations[lake.lowest_shore_point],
+                Some(lake_id),
+                "Lake builder #{}: {:?}'s highest point belongs to lake {:?}",
+                lake_id,
+                lake,
+                deduped_lake_associations[lake.lowest_shore_point]
+            );
+        }
+    }
+
+    log!("Associations: {:?}", deduped_lake_associations);
+    log!("Found {} lakes", deduped_lakes.len());
+
+    let mut sorted_lakes = deduped_lakes.clone();
+    sorted_lakes.sort_by_key(|lake| lake.area);
+
+    log!("Lakes by area: {:?}", sorted_lakes);
+
+    for association in deduped_lake_associations.iter().flatten() {
+        assert!(*association < deduped_lakes.len());
+    }
+
+    (deduped_lakes, deduped_lake_associations)
 }
