@@ -31,11 +31,6 @@ pub fn get_flux(
         let flux_downstream = if let Some(lake_id) = lake_associations[point] {
             let lake = lakes[lake_id];
             if lake.lowest_shore_point == point {
-                log!(
-                    "Flowing from lake with {:.4} inflow and {} area",
-                    lake.inflow_flux,
-                    lake.area
-                );
                 lake.inflow_flux + lake.area as f64
             } else {
                 0.0

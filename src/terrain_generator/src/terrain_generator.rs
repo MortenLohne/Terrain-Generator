@@ -149,12 +149,7 @@ impl TerrainGenerator {
         log!(" ·  ✓ and plateaued");
 
         for _ in 0..10 {
-            heights = erode(
-                heights,
-                &voronoi,
-                &voronoi.adjacent,
-                sea_level,
-            );
+            heights = erode(heights, &voronoi, &voronoi.adjacent, sea_level);
         }
 
         log!(" ·  ✓ and eroded ×10");
@@ -167,8 +162,6 @@ impl TerrainGenerator {
             lake_associations.iter().filter(|b| b.is_some()).count(),
             lake_associations.iter().filter(|b| b.is_none()).count()
         );
-
-        log!("{:?}", lakes);
 
         let cell_heights = TerrainGenerator::get_cell_heights(
             voronoi.delaunay.points.len() / 2,

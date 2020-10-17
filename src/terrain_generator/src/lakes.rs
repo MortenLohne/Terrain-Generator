@@ -180,27 +180,6 @@ pub fn generate_lakes(
         lake_associations
     );
 
-    for (i, lake_association) in lake_associations.iter().enumerate() {
-        if let Some(l) = lake_association {
-            if lake_builders[*l].lowest_shore_point == Some(i) {
-                log!("Lake {:?} at points {}", lake_builders[*l], i);
-            }
-        }
-    }
-
-    for (lake_id, lake_builder) in lake_builders.iter().enumerate() {
-        if lake_builder.lowest_shore_point.is_some() {
-            assert_eq!(
-                lake_associations[lake_builder.lowest_shore_point.unwrap()],
-                Some(lake_id),
-                "Lake builder #{}: {:?}'s highest point belongs to lake {:?}",
-                lake_id,
-                lake_builder,
-                lake_associations[lake_builder.lowest_shore_point.unwrap()]
-            );
-        }
-    }
-
     let deduped_lakes: Vec<Lake> = lake_associations
         .iter()
         .enumerate()
@@ -232,30 +211,15 @@ pub fn generate_lakes(
         }
     }
 
-    for (lake_id, lake) in deduped_lakes.iter().enumerate() {
-        if lake.lowest_shore_point != 0 && lake.area != 0 {
-            assert_eq!(
-                deduped_lake_associations[lake.lowest_shore_point],
-                Some(lake_id),
-                "Lake builder #{}: {:?}'s highest point belongs to lake {:?}",
-                lake_id,
-                lake,
-                deduped_lake_associations[lake.lowest_shore_point]
-            );
-        }
-    }
-
-    log!("Associations: {:?}", deduped_lake_associations);
     log!("Found {} lakes", deduped_lakes.len());
 
     let mut sorted_lakes = deduped_lakes.clone();
     sorted_lakes.sort_by_key(|lake| lake.area);
 
-    log!("Lakes by area: {:?}", sorted_lakes);
-
-    for association in deduped_lake_associations.iter().flatten() {
-        assert!(*association < deduped_lakes.len());
-    }
+    log!(
+        "Top 10 lakes by area: {:?}",
+        sorted_lakes.iter().rev().take(10).collect::<Vec<_>>()
+    );
 
     (deduped_lakes, deduped_lake_associations)
 }
