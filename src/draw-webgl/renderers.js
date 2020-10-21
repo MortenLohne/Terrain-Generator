@@ -22,6 +22,10 @@ export default function getRenderers (regl) {
         buffer: regl.prop('normals'),
         size: 3,
       },
+      waterDepth: {
+	buffer: regl.prop('waterDepths'),
+	size: 1,
+      },
     },
     uniforms: {
       projection: regl.prop('projectionMatrix'),

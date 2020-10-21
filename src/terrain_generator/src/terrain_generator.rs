@@ -7,7 +7,7 @@ use super::poisson;
 use super::rivers::*;
 use super::utils;
 use super::voronoi::Voronoi;
-use crate::lakes::{generate_lakes, Lake};
+use crate::lakes::generate_lakes;
 
 extern crate web_sys;
 
@@ -33,7 +33,8 @@ pub struct World {
     #[serde(rename = "coastLines")]
     coast_lines: Vec<(usize, usize)>,
 
-    lakes: Vec<Lake>,
+    #[serde(rename = "waterDepths")]
+    water_depths: Vec<f64>,
 }
 
 #[wasm_bindgen]
@@ -197,11 +198,23 @@ impl TerrainGenerator {
         );
         log!(" ✓ coasts lines carved");
 
+        /*
         for (i, height) in heights.iter_mut().enumerate() {
             if lake_associations[i].is_some() {
                 *height -= 0.05;
             }
         }
+        */
+        let water_depths = lake_associations
+            .iter()
+            .enumerate()
+            .map(|(i, l)| l.map(|l| {
+                let water_height = lakes[l].water_level - heights[i];
+                assert!(water_height >= 0.0, "Got {} water height for point in lake #{} {:?}", water_height, l, lakes[l]);
+                water_height
+            }
+            ).unwrap_or(0.0))
+            .collect();
 
         World {
             voronoi,
@@ -210,7 +223,7 @@ impl TerrainGenerator {
             rivers,
             // triangle_heights,
             coast_lines,
-            lakes,
+            water_depths,
         }
     }
 }

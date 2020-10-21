@@ -6,7 +6,7 @@ import { color, normal } from './utils.js';
 import getRenderers from './renderers.js';
 
 
-export default function initDraw (canvas, triangles, points, circumcenters, seaLevel, coastLines, rivers, cellHeights, heights) {
+export default function initDraw (canvas, triangles, points, circumcenters, seaLevel, coastLines, rivers, cellHeights, heights, waterDepths) {
   const regl = REGL({ canvas, extensions: ['ANGLE_instanced_arrays'] });
 
   const fieldOfView = 20 * Math.PI / 180 // in radians
@@ -38,6 +38,7 @@ export default function initDraw (canvas, triangles, points, circumcenters, seaL
 
   const positions = Float32Array.from(triangleCoordinates.flat().flat());
   const normals = Float32Array.from(triangleCoordinates.map(normal).flatMap(n => [...n, ...n, ...n]));
+  const waterDepthsArray = Float32Array.from(triangles.flatMap(([_, b, c]) => [waterDepths[c], waterDepths[b], waterDepths[c]]).map(n => n || 0.0));
 
   // Rivers
   const riverCap = 1;
@@ -102,6 +103,7 @@ export default function initDraw (canvas, triangles, points, circumcenters, seaL
     drawTerrain({
       positions,
       normals,
+      waterDepths: waterDepthsArray,
       projectionMatrix,
       modelViewMatrix,
       hillColor:  color('#d3feb0'),

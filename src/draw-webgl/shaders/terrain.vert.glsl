@@ -3,10 +3,12 @@ uniform mat4 projection;
 
 attribute highp vec4 position;
 attribute vec4 normal;
+attribute float waterDepth;
 
 varying lowp float vLight;
 varying highp vec3 vPos;
 varying highp vec3 vNormal;
+varying highp float vWaterDepth;
 
 void main(void) {
   highp vec3 lightDirection = normalize(vec3(0.2, .2, 1));
@@ -17,4 +19,5 @@ void main(void) {
   vLight = light;
   vNormal = normalize(normal.xyz);
   vPos = position.xyz;
+  vWaterDepth = waterDepth;
 }
